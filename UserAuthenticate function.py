@@ -28,19 +28,28 @@ def main():
 #the function reads the message (which should be the username and password in JSON) and then is sent to the database to authenticate
 #if the username and password match a record in the database mycursor.rowcount will hold the value 1 and send "True" to rabbitMQ 
 #if there is no match or somehow there more then one record chosen callback will send "False" to rabbitMQ
-    def callback(ch, method, properties, body):
+     def callback (ch, method, properties, body):
         info = ("%r" % body)
         info = info.strip("'")
         info = json.loads(info)
-        query = ("SELECT * FROM Users WHERE username =%s AND password =%s")
-        mycursor.execute(query, (info["username"], info["password"],))
-        result = mycursor.fetchall()
-        if mycursor.rowcount == 1:
-            channel2.basic_publish(exchange='', routing_key='confrim', body='True')
-            connection.close()
+        if "email" in info:
+            if "@gmail.com" in info["email"] or "@yahoo.com" in info["email"] or "@aol.com" in info["email"]:
+                query = ("INSERT INTO Users (username, email, password) VALUES (%s, %s, %s)")
+                mycursor.execute(query, (info["username"], info["email"], info["password"],))
+                mydb.commit()
+                channel2.basic_publish(exchange='', routing_key='confrim', body='user added')
+            else:
+                channel2.basic_publish(exchange='', routing_key='confrim', body='Invaild email')
         else:
-            channel2.basic_publish(exchange='', routing_key='confrim', body='False')
-            connection.close()
+            query = ("SELECT * FROM Users WHERE username =%s AND password = %s")
+            mycursor.execute(query, (info["username"], info["password"],))
+            results = mycursor.fetchall()
+            if mycursor.rowcount == 1:
+                channel2.basic_publish(exchange='', routing_key='confrim', body='Correct username and password')
+                connection.close()
+            else:
+                channel2.basic_publish(exchange='', routing_key='confrim', body='Username or password is incorrect')
+
     
 #these two lines start the consume process on the queue "hello"    
     channel.basic_consume(queue='hello', on_message_callback=callback, auto_ack=True)
